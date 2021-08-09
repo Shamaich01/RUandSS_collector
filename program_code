@@ -1,0 +1,231 @@
+import tkinter as tk
+import tkinter.filedialog
+from tkinter.messagebox import showinfo
+import xlrd
+import zipfile
+import os
+import docx
+from docx.shared import Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+count = 0
+
+
+def unblock_butts():
+    btn3['state'] = tk.NORMAL
+    btn3['bg'] = 'lightgreen'  
+    btn4['state'] = tk.NORMAL
+    btn4['bg'] = 'lightgreen'     
+
+def collector():
+    """Функция для выбора excel-таблицы и сохранения её данных в виде списка"""
+    filetypes = (
+        ('Excelx files', '*.xlsx'),
+        ('Excel files', '*.xls'),
+    )
+
+    filename = tkinter.filedialog.askopenfilename(
+        title='Открыть Excel',
+        initialdir='/',
+        filetypes=filetypes)
+
+     
+    wb = xlrd.open_workbook(filename)
+    sheet = wb.sheet_by_index(0)
+    sheet.cell_value(0, 0)
+    
+    global src
+    src = []
+    for i in range(sheet.nrows):
+        src.append(sheet.cell_value(i, 0))
+    
+    showinfo(
+        title='Открыть Excel',
+        message=f'Файл выбран. Всего позиций в файле: {len(src)}'
+    )
+
+    lable1.configure(text=f'Выбрано {len(src)} позиций', bg='lightgrey')
+    global count
+    count +=1
+    if count == 3: 
+        unblock_butts() 
+    
+def base():
+    """Функция для вызова файлового менеджера с целью указания Базы"""
+    filetypes = (
+        ('Excelx files', '*.xlsx'),
+        ('Excel files', '*.xls'),
+    )
+
+    filename = tkinter.filedialog.askopenfilename(
+        title='Открыть Базу в Excel',
+        initialdir='/',
+        filetypes=filetypes)
+
+    global sheet
+    wb = xlrd.open_workbook(filename)
+    sheet = wb.sheet_by_index(0)
+    sheet.cell_value(0, 0)
+
+    global control
+    control = {}
+    
+    for i in range(sheet.nrows):
+        try:
+            key = sheet.cell_value(i, 0)
+            value1 = sheet.cell_value(i, 1)
+            value2 = sheet.cell_value(i, 2)
+            value3 = sheet.cell_value(i, 3)
+            control[key] = [value1, value2, value3]
+        except (ValueError, IndexError):
+            continue
+    lable2.configure(text='База задана', bg='lightgrey')
+    global count
+    count +=1
+    if count == 3: unblock_butts()
+
+
+def manuf_and_country():
+    """Функция для создания документа с таблицей о производителе и стране
+    производства"""
+    doc = docx.Document()
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Times New Roman'
+    font.size = Pt(12)
+    heading = doc.add_paragraph()
+    heading.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    heading_1 = heading.add_run('Декларация о стране происхождения \nпредлагаемых к поставке товаров')
+    heading_1.font.size = Pt(14)
+    heading_1.bold = True
+    heading_1.alignment = 1
+    p1 = doc.add_paragraph(
+        """В целях исполнения п. 6 ч. 5 ст. 66, ч. 4 ст. 14 Закона от 05.04.2013 № 44-ФЗ «О контрактной системе в сфере закупок товаров, работ, услуг для обеспечения государственных и муниципальных нужд», Приказа Минэкономразвития России от 25.03.2014 № 155 «Об условиях допуска товаров, происходящих из иностранных государств, для целей осуществления закупок товаров, работ, услуг для обеспечения государственных и муниципальных нужд» Общество с ограниченной ответственностью «БиоЛаб-Мед» сообщает:"""
+    )
+    p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    
+    
+    table = doc.add_table(rows=1, cols=4)
+    table.style = 'Table Grid'
+
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = '№ п/п'
+    hdr_cells[1].text = 'Наименование'
+    hdr_cells[2].text = 'Производитель'
+    hdr_cells[3].text = 'Страна производства'
+    counter = 0
+    for i in src:
+        counter += 1
+        try:
+            row_cells = table.add_row().cells
+            row_cells[0].text = str(counter)
+            row_cells[1].text = i
+            row_cells[2].text = control[i][0]   
+            row_cells[3].text = control[i][1] 
+        except:
+            continue
+    table.alignment=WD_ALIGN_PARAGRAPH.CENTER
+    doc.save(output_folder + '/Декларация о стране происхождения.doc')
+
+def constructor():
+    """Функция для сбора в один архив файлов, ссылки на которых имеются после
+    выполнения функции collector"""
+    links = []
+    errors = []
+    for i in src:
+        if i in control:
+            a = control[i][2]
+            links.extend(a.split(', '))
+
+        else:
+            errors.append(i)
+
+    unique = []
+    for i in links:
+        if i not in unique:
+            unique.append(i)
+
+    archive(unique)
+
+    if len(errors) == 0:        
+        showinfo(
+            title='Отчет о работе',
+            message='Архив собран. Ошибок в ходе работы не обнаружено.'
+            )  
+    else:
+        showinfo(
+            title='Отчет о работе',
+            message=f'Архив собран. Не найдены РУ и СС на следующие позиции: {errors}'
+            )   
+    
+    
+def archive(links):
+    """Функция для архивации выбранных файлов"""
+    newzip = zipfile.ZipFile(output_folder + '/RUandSS.zip', 'w')
+    for i in links:
+        p = os.path.abspath(f"RUandSS/All_files/{i}")
+        newzip.write(p, f'RUandSS/{i}')
+    newzip.close()
+
+
+def info_box():
+    showinfo('Инструкция', """   Программа предназначена для создания Декларации о стране происхождения и создания архива с РУ и СС по заданной базе.
+   1 шаг: Указать искомые позиции. Для этого создается табличка Excel со всеми позциями.
+   2 шаг: Указать базу. Она лежит в той же папке, что и эта программа. Представляет собой табличку Excel.
+   3 шаг (опционально): Указать место, куда сохранятся все файлы.
+   4 шаг: С выполненными шагами 1 и 2 можно нажимать на оставшиеся кнопки, в зависимости от преследуемых целей.""")
+
+def output_folder():
+    global output_folder
+    output_folder = tk.filedialog.askdirectory()
+    lable21.configure(text='Директория задана', bg='lightgrey')
+    global count
+    count +=1
+    if count == 3: unblock_butts()
+
+if __name__ == "__main__":
+    win = tk.Tk()
+    win.title('Автоматический сборщик РУ и СС')
+    win.geometry('500x400+400+200')
+    win.resizable(False, False)
+    win.config(bg='#DBCFCF')
+    info_btn = tk.Button(win, text='Инструкция', command=info_box)
+    info_btn.pack(anchor='ne')
+    btn1 = tk.Button(win, text='Указать позиции (.xls)',
+                     bg='white',
+                     command=collector
+                     )
+    btn1.pack()
+    lable1 = tk.Label(text='Позиции не выбраны',
+                      bg='grey')
+    lable1.pack()
+    btn2 = tk.Button(win, text='Выбрать базу',
+                     bg='white',
+                     command=base
+                     )
+    btn2.pack()  
+    lable2 = tk.Label(text='База не задана',
+                      bg='grey')   
+    lable2.pack()
+    btn21 = tk.Button(win, text='Выбрать директорию',
+                     bg='white',
+                     command=output_folder
+                     )
+    btn21.pack()
+    lable21 = tk.Label(text='Директория не указана',
+                      bg='grey')   
+    lable21.pack()    
+    btn3 = tk.Button(win, text='Производитель и страна производства',
+                     bg='white',
+                     command=manuf_and_country,
+                     state=tk.DISABLED
+                     )
+    btn3.pack(pady=20)    
+    btn4 = tk.Button(win, text='Собрать архив',
+                     bg='white',
+                     command=constructor,
+                     state=tk.DISABLED
+                     )
+    btn4.pack()
+    
+    win.mainloop()
